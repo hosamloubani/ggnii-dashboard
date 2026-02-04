@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>GGNII Macro Dashboard</title>
+
+<style>
+:root{
+  --bg:#0b0f14;--card:#121826;--border:#1f2937;
+  --green:#22c55e;--red:#ef4444;--yellow:#facc15;
+  --blue:#38bdf8;--text:#e5e7eb;--muted:#94a3b8;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,Arial}
+.container{max-width:1500px;margin:auto;padding:30px}
+.dashboard{display:grid;grid-template-columns:repeat(4,1fr);gap:20px}
+.card{
+  background:linear-gradient(180deg,#121826,#0f1624);
+  border:1px solid var(--border);
+  border-radius:16px;
+  padding:20px
+}
+.full{grid-column:span 4}
+.half{grid-column:span 2}
+h3{margin:0 0 10px}
+.value{font-size:36px;font-weight:bold}
+.green{color:var(--green)}
+.red{color:var(--red)}
+.yellow{color:var(--yellow)}
+.blue{color:var(--blue)}
+.muted{color:var(--muted)}
+.progress{
+  width:100%;height:14px;background:#0b1220;
+  border-radius:10px;overflow:hidden;margin-top:6px
+}
+.bar{height:100%;transition:width .6s ease}
+.news{max-height:240px;overflow-y:auto;font-size:14px}
+.news li{margin-bottom:8px}
+</style>
+</head>
+
+<body>
+<div class="container">
+<div class="dashboard">
+
+<!-- TOP -->
+<div class="card">
+  <h3>GGNII</h3>
+  <div id="ggnii" class="value">--</div>
+  <div id="news-count" class="muted"></div>
+</div>
+
+<div class="card">
+  <h3>Confidence</h3>
+  <div id="confidence" class="value">--%</div>
+</div>
+
+<div class="card">
+  <h3>Market Regime</h3>
+  <div id="regime" class="value blue">--</div>
+</div>
+
+<div class="card">
+  <h3>Signal</h3>
+  <div id="signal" class="value">--</div>
+</div>
+
+<!-- GOLD -->
+<div class="card half">
+  <h3>Gold Price</h3>
+  <div id="gold-price" class="value">--</div>
+  <div id="gold-time" class="muted"></div>
+</div>
+
+<div class="card half">
+  <h3>Strategy</h3>
+  <div>Entry: <span id="entry">--</span></div>
+  <div class="green">TP: <span id="tp">--</span></div>
+  <div class="red">SL: <span id="sl">--</span></div>
+</div>
+
+<!-- PROBABILITY -->
+<div class="card full">
+  <h3>Gold Direction Probability</h3>
+  Bullish: <strong id="bullish-pct">--%</strong>
+  <div class="progress"><div id="bullish-bar" class="bar green"></div></div>
+  <br>
+  Bearish: <strong id="bearish-pct">--%</strong>
+  <div class="progress"><div id="bearish-bar" class="bar red"></div></div>
+</div>
+
+<!-- 🔮 GOLD BEHAVIOR FORECAST (NEW) -->
+<div class="card full">
+  <h3>Gold Behavior Forecast (News-Based)</h3>
+  <div id="behavior-direction" class="value">--</div>
+  <div id="behavior-strength" class="muted"></div>
+  <div id="behavior-horizon" class="muted"></div>
+  <div id="behavior-explanation" class="muted" style="margin-top:10px;"></div>
+</div>
+
+<!-- DECISION EXPLAIN -->
+<div class="card full">
+  <h3>Decision Transparency</h3>
+  <div id="decision-status" class="value">--</div>
+  <ul id="decision-checks" style="margin-top:10px;font-size:14px;"></ul>
+  <div id="decision-explanation" class="muted" style="margin-top:10px;"></div>
+</div>
+
+<!-- CORRELATION -->
+<div class="card half">
+  <h3>Correlation</h3>
+  <div id="correlation"></div>
+</div>
+
+<!-- NEWS -->
+<div class="card half">
+  <h3>High Impact News</h3>
+  <ul id="news" class="news"></ul>
+</div>
+
+</div>
+</div>
+
+<script>
+// ================= INDEX =================
+async function loadIndex(){
+  const d = await (await fetch("/index")).json();
+  const g = document.getElementById("ggnii");
+  g.innerText = d.normalized_GGNII;
+  g.className = "value " + (d.normalized_GGNII < -30 ? "green" :
+                           d.normalized_GGNII > 30 ? "red" : "yellow");
+
+  const c = document.getElementById("confidence");
+  c.innerText = d.confidence + "%";
+  c.className = "value " + (d.confidence >= 70 ? "green" :
+                            d.confidence >= 40 ? "yellow" : "red");
+
+  document.getElementById("news-count").innerText = "News: " + d.news_count;
+}
+
+// ================= STRATEGY =================
+async function loadStrategy(){
+  const d = await (await fetch("/strategy")).json();
+  if(d.status) return;
+
+  document.getElementById("signal").innerText = d.signal;
+  document.getElementById("signal").className =
+    "value " + (d.signal==="BUY"?"green":d.signal==="SELL"?"red":"yellow");
+
+  document.getElementById("regime").innerText = d.regime;
+  document.getElementById("entry").innerText = d.entry ?? "--";
+  document.getElementById("tp").innerText = d.tp ?? "--";
+  document.getElementById("sl").innerText = d.sl ?? "--";
+
+  document.getElementById("bullish-pct").innerText = d.probability.bullish + "%";
+  document.getElementById("bearish-pct").innerText = d.probability.bearish + "%";
+  document.getElementById("bullish-bar").style.width = d.probability.bullish + "%";
+  document.getElementById("bearish-bar").style.width = d.probability.bearish + "%";
+}
+
+// ================= GOLD BEHAVIOR =================
+async function loadGoldBehavior(){
+  const d = await (await fetch("/gold-behavior")).json();
+  if(d.status) return;
+
+  const b = d.behavior;
+  const dir = document.getElementById("behavior-direction");
+
+  dir.innerText = b.direction;
+  dir.className = "value " + (
+    b.direction==="UP"?"green":
+    b.direction==="DOWN"?"red":"yellow"
+  );
+
+  document.getElementById("behavior-strength").innerText =
+    "Strength: " + b.strength;
+
+  document.getElementById("behavior-horizon").innerText =
+    "Horizon: " + b.horizon;
+
+  document.getElementById("behavior-explanation").innerText =
+    b.explanation;
+}
+
+// ================= DECISION EXPLAIN =================
+async function loadDecisionExplain(){
+  const d = await (await fetch("/decision-explain")).json();
+  if(d.status) return;
+
+  const s = document.getElementById("decision-status");
+  s.innerText = d.decision;
+  s.className = "value " + (d.decision==="TRADE_ALLOWED"?"green":"yellow");
+
+  const ul = document.getElementById("decision-checks");
+  ul.innerHTML = "";
+  Object.keys(d.checks).forEach(k=>{
+    const c = d.checks[k];
+    ul.innerHTML += `
+      <li class="${c.status==="PASS"?"green":"red"}">
+        ${c.status==="PASS"?"✔":"✖"} ${k.toUpperCase()} — ${c.note}
+      </li>`;
+  });
+
+  document.getElementById("decision-explanation").innerText =
+    d.explanation;
+}
+
+// ================= GOLD =================
+async function loadGold(){
+  const d = await (await fetch("/gold-latest")).json();
+  if(d.status!=="ok") return;
+  document.getElementById("gold-price").innerText = d.price + " $";
+  document.getElementById("gold-time").innerText =
+    "Updated: " + new Date(d.created_at).toLocaleTimeString();
+}
+
+// ================= NEWS =================
+async function loadNews(){
+  const d = await (await fetch("/latest-news")).json();
+  const ul = document.getElementById("news");
+  ul.innerHTML = "";
+  d.forEach(n=>{
+    ul.innerHTML += `<li>
+      <span class="${n.impact>0?"green":"red"}">${n.impact}</span> — ${n.title}
+    </li>`;
+  });
+}
+
+// ================= CORRELATION =================
+async function loadCorrelation(){
+  const d = await (await fetch("/correlation")).json();
+  const box = document.getElementById("correlation");
+  box.innerHTML = "";
+  Object.keys(d).forEach(k=>{
+    const c = d[k];
+    box.innerHTML += `<div class="${c.direction==="Positive"?"green":"red"}">
+      ${k}: ${c.correlation} (${c.strength})
+    </div>`;
+  });
+}
+
+// INIT
+loadIndex();
+loadStrategy();
+loadGoldBehavior();
+loadDecisionExplain();
+loadGold();
+loadNews();
+loadCorrelation();
+
+setInterval(loadGold, 5000);
+setInterval(()=>{
+  loadIndex();
+  loadStrategy();
+  loadGoldBehavior();
+  loadDecisionExplain();
+  loadNews();
+  loadCorrelation();
+}, 10000);
+</script>
+
+</body>
+</html>
